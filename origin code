@@ -1,0 +1,434 @@
+const unsigned char
+dofly_DuanMa[10]={0x3f,0x06,0x5b,0x4f,0x66,0x6d,0x7d,0x07,0x7f,0x6f}; 
+//无小数点的段码
+const unsigned char
+dofly_DuanMa2[10]={0xBF,0x86,0xDB,0xCF,0xE6,0xED,0xFD,0x87,0xFF,0xEF};
+//有小数点的段码
+int canlendar[12]={31,28,31,30,31,30,31,31,30,31,30,31};//日期数组
+int CLKsecond = 8;//秒——时钟引脚
+int DATsecondhigh = 9;//十秒位引脚
+int DATsecondlow = 10;//个秒引脚
+int CLKminute = 5;//与上类似
+int DATminutehigh = 6;
+int DATminutelow = 7;
+int CLKhour = 2;//与上类似
+int DAThourhigh = 3;
+int DAThourlow = 4;
+int second = 0;
+int minute = 0;
+int hour = 0;
+int LEDsecond = 11;//设置模式指示灯显示输出引脚
+int LEDminute = 12;//与上类似
+int LEDhour = A1;//与上类似
+int switchread = A0;//AD键盘读取
+int debouncetime = 50;//延时按键防抖动
+int setcondition = 0;//控制变量
+int clocksecondlow = 0;//时钟模式的计算变量
+int clocksecondhigh = 0;//与上类似
+int clockminute = 0;//与上类似
+int clockcondition = 0;//时钟模式的控制变量
+int begincondition = 1;//时钟模式下开始计时的控制变量
+unsigned long timecount = 0;//用于按键操作来同步实时间的变量
+int timecontrol = 0;//时间控制变量
+int delaycondition = 1;//延时控制变量
+int year = 0;
+int month = 1;
+int day = 1;
+int calendarcondition = 0;//日期显示控制变量
+
+void SendByte(unsigned char dathigh,unsigned char datlow,char data) 
+{ 
+ static unsigned char i; 
+ if(data=='S')
+ {
+  for(i=0;i<8;i++) 
+  { 
+   digitalWrite(CLKsecond,0); 
+   digitalWrite(DATsecondhigh,bitRead(dathigh,7-i));
+   digitalWrite(DATsecondlow,bitRead(datlow,7-i));
+   digitalWrite(CLKsecond,1); 
+  } 
+ }
+ 
+ if(data=='M')
+ {
+  for(i=0;i<8;i++) 
+  { 
+   digitalWrite(CLKminute,0); 
+   digitalWrite(DATminutehigh,bitRead(dathigh,7-i));
+   digitalWrite(DATminutelow,bitRead(datlow,7-i));
+   digitalWrite(CLKminute,1); 
+  } 
+ }
+
+ if(data=='H')
+ {
+  for(i=0;i<8;i++) 
+  { 
+   digitalWrite(CLKhour,0); 
+   digitalWrite(DAThourhigh,bitRead(dathigh,7-i));
+   digitalWrite(DAThourlow,bitRead(datlow,7-i));
+   digitalWrite(CLKhour,1); 
+  } 
+ }
+ 
+} 
+//数码管显示函数
+//以下没有注释函数的功能同名字
+void TimeSetsecond()
+{
+  int reading3 = analogRead(switchread);
+  delay(debouncetime);
+  int reading4 = analogRead(switchread);
+  if(reading4-reading3 >=-1 && reading4-reading3<=1)
+  {
+    if(reading4 >= 500 && reading4 < 900)//第二个按键对应的模拟输入
+      second = 0;
+  }
+  SendByte(dofly_DuanMa[second/10],dofly_DuanMa[second%10],'S');
+}
+
+void TimeSetminute()
+{
+  int reading3 = analogRead(switchread);
+  delay(debouncetime);
+  int reading4 = analogRead(switchread);
+  if(reading4-reading3 >=-1 && reading4-reading3<=1)
+  {
+    if(reading4 >= 500 && reading4 < 900)//第二个按键对应的模拟输入
+      minute++;
+      if(minute==60)
+      minute = 0;
+  }
+  SendByte(dofly_DuanMa[minute/10],dofly_DuanMa2[minute%10],'M');
+}
+
+void TimeSethour()
+{
+  int reading3 = analogRead(switchread);
+  delay(debouncetime);
+  int reading4 = analogRead(switchread);
+  if(reading4-reading3 >=-1 && reading4-reading3<=1)
+  {
+    if(reading4 >= 500 && reading4 < 900)//第二个按键对应的模拟输入
+      hour++;
+      if(hour == 24)
+      hour = 0;
+  }
+  SendByte(dofly_DuanMa[hour/10],dofly_DuanMa2[hour%10],'H');
+}
+
+void personalclearclock()
+{
+  clockminute = 0;
+  clocksecondhigh = 0;
+  clocksecondlow = 0;
+}
+//这是按键操作的时候为了同步时钟显示所进行的操作
+void timecount0()
+{
+  if(timecount==1000)
+  {
+  timecount=0;
+  second++;
+  }
+}
+//计时模式的时间计算
+void clockclear()
+{
+   if(clocksecondlow==100)
+   {
+   clocksecondlow = 0;
+   clocksecondhigh++;
+   }
+   if(clocksecondhigh == 60)
+   {
+   clocksecondhigh = 0;
+   clockminute++;
+   }
+   if(clockminute == 60)
+   clockminute = 0;
+}
+//时钟模式的时间计算
+void normalclear()
+{
+  if(second == 60)
+  {
+  second = 0;
+  minute++;
+  }
+  if(minute == 60)
+  {
+  minute = 0;
+  hour++;
+  }
+  if(hour == 24)
+  {
+  hour = 0;
+  day++;
+  }
+}
+//日期的计算
+void dayclear()
+{
+  if(year%4==0&&year%400!=0 || year%400==0)
+  canlendar[1] = 29;
+  if(day > canlendar[month-1])
+  {
+    month++;
+    day = 1;
+  }
+  if(month==13)
+  {
+    year++;
+    month = 1;
+  }
+  if(!(year%4==0&&year%400!=0 || year%400==0))
+  canlendar[1] = 28;
+}
+
+void displayyearmonthday()
+{
+  SendByte(dofly_DuanMa[year/10],dofly_DuanMa2[year%10],'H');
+  SendByte(dofly_DuanMa[month/10],dofly_DuanMa2[month%10],'M');
+  SendByte(dofly_DuanMa[day/10],dofly_DuanMa2[day%10],'S');
+}
+
+void Timesetday()
+{
+  displayyearmonthday();
+  int reading3 = analogRead(switchread);
+  delay(debouncetime);
+  int reading4 = analogRead(switchread);
+  if(reading4-reading3 >=-1 && reading4-reading3<=1)
+  {
+    if(reading4 >= 500 && reading4 < 900)//第二个按键对应的模拟输入
+      day++;
+      if(day > canlendar[month-1])
+      day = 1;
+  }
+  SendByte(dofly_DuanMa[day/10],dofly_DuanMa2[day%10],'S');
+}
+
+void Timesetmonth()
+{
+  displayyearmonthday();
+  int reading3 = analogRead(switchread);
+  delay(debouncetime);
+  int reading4 = analogRead(switchread);
+  if(reading4-reading3 >=-1 && reading4-reading3<=1)
+  {
+    if(reading4 >= 500 && reading4 < 900)//第二个按键对应的模拟输入
+      month++;
+      if(month == 13)
+      month = 1;
+  }
+  SendByte(dofly_DuanMa[month/10],dofly_DuanMa2[month%10],'M');
+}
+
+void Timesetyear()
+{
+  displayyearmonthday();
+  int reading3 = analogRead(switchread);
+  delay(debouncetime);
+  int reading4 = analogRead(switchread);
+  if(reading4-reading3 >=-1 && reading4-reading3<=1)
+  {
+    if(reading4 >= 500 && reading4 < 900)//第二个按键对应的模拟输入
+      year++;
+      if(year == 100)
+      year = 0;
+  }
+  SendByte(dofly_DuanMa[year/10],dofly_DuanMa2[year%10],'H');
+}
+
+void displayhourminutesecond()
+{
+  SendByte(dofly_DuanMa[second/10],dofly_DuanMa[second%10],'S'); 
+  SendByte(dofly_DuanMa[minute/10],dofly_DuanMa2[minute%10],'M'); 
+  SendByte(dofly_DuanMa[hour/10],dofly_DuanMa2[hour%10],'H'); 
+}
+
+void displayclock()
+{
+  SendByte(dofly_DuanMa[clocksecondlow/10],dofly_DuanMa[clocksecondlow%10],'S'); 
+  SendByte(dofly_DuanMa[clocksecondhigh/10],dofly_DuanMa2[clocksecondhigh%10],'M'); 
+  SendByte(dofly_DuanMa[clockminute/10],dofly_DuanMa2[clockminute%10],'H');
+}
+进行了引脚的初始化和串口通讯的初始化功能
+void setup() {
+ pinMode(CLKsecond, OUTPUT); 
+ pinMode(DATsecondhigh, OUTPUT);
+ pinMode(DATsecondlow, OUTPUT);
+ pinMode(CLKminute, OUTPUT); 
+ pinMode(DATminutehigh, OUTPUT);
+ pinMode(DATminutelow, OUTPUT);
+ pinMode(CLKhour, OUTPUT); 
+ pinMode(DAThourhigh, OUTPUT);
+ pinMode(DAThourlow, OUTPUT);
+ pinMode(LEDsecond,OUTPUT);
+ pinMode(LEDminute,OUTPUT);
+ pinMode(LEDhour,OUTPUT);
+ pinMode(switchread,INPUT);
+ digitalWrite(LEDsecond,HIGH);
+ digitalWrite(LEDminute,HIGH);
+ digitalWrite(LEDhour,HIGH);
+ Serial.begin(9600);
+}
+
+void loop() {
+  int reading1 = analogRead(switchread);
+  delay(debouncetime);
+  if(timecontrol)
+  timecount+=debouncetime;
+  timecount0();
+  //这三步程序是为了在其他模式下进行按键操作时同步时钟
+  int reading2 = analogRead(switchread);
+  Serial.println(reading1);
+  Serial.println(reading2);
+  Serial.println(setcondition);
+  //AD键盘读入和串口测试
+  clockclear();
+  normalclear();
+  dayclear();
+  //防止相应的计算结果溢出
+  if(reading2 - reading1 >=-1 && reading2 - reading1 <= 1)
+  {
+    if(reading2==0)
+      goto FLAG;//无效按键操作，直接显示
+    if(reading2 >= 900)//第一个按键的模拟输入
+    {
+      setcondition++;
+      if(setcondition==7)
+      setcondition = 0;
+    }
+    if(reading2 >= 300 && reading2 < 500)//第三个按键的模拟输入
+    {
+      delay(debouncetime);
+      timecount+=debouncetime;
+      timecount0();
+      //这两步程序是为了在其他模式下进行按键操作时同步时钟
+      timecontrol = 1;
+      setcondition = 8;
+      Serial.println("clock!");
+      clockcondition++;
+      if(clockcondition == 2)
+      {
+      clockcondition = 0;
+      setcondition = 0;
+      delaycondition = -delaycondition;
+      }//按一次按键就切换一次模式
+    }
+    if(reading2 >= 200 && reading2 < 300 && clockcondition == 1)
+    {//第四个按键的模拟输入 在计时模式的情况下 开始和停止计时
+      begincondition = -begincondition;
+      delay(debouncetime);
+      timecount+=debouncetime;
+      timecount0();
+      //这两步程序是为了在其他模式下进行按键操作时同步时钟
+    }
+    
+     if(reading2 >= 200 && reading2 < 300 && clockcondition != 1)
+     {//第四个按键的模拟输入 在计时模式的情况下 显示日期
+      delay(debouncetime);
+      timecount+=debouncetime;
+      timecount0();
+      timecontrol = 1;
+      setcondition =9;
+      calendarcondition++;
+      if(calendarcondition==2)
+      {
+        calendarcondition = 0;
+        setcondition = 0;
+        delaycondition = -delaycondition;
+      }//按一次按键就切换一次显示
+     }
+     
+    if(reading2 >= 500 && reading2 < 900 && clockcondition == 1)
+      personalclearclock(); 
+  }//清零按键也是第二个按键的模拟输入 在调节时间的模式下
+  switch(setcondition)
+      {
+        case 0://正常显示时间
+        Serial.println("OK!");
+        digitalWrite(LEDsecond,LOW);
+        digitalWrite(LEDminute,LOW);
+        digitalWrite(LEDhour,LOW);
+        personalclearclock();
+        timecontrol = 0;
+        break;
+        case 1://设置时间——时
+        Serial.println("OK!");
+        digitalWrite(LEDsecond,LOW);
+        digitalWrite(LEDminute,LOW);
+        digitalWrite(LEDhour,HIGH);
+        TimeSethour();
+        break;
+        case 2://设置时间——分
+        Serial.println("OK!");
+        digitalWrite(LEDsecond,LOW);
+        digitalWrite(LEDminute,HIGH);
+        digitalWrite(LEDhour,LOW);
+        TimeSetminute();
+        break;
+        case 3://设置时间——秒
+        Serial.println("OK!");
+        digitalWrite(LEDsecond,HIGH);
+        digitalWrite(LEDminute,LOW);
+        digitalWrite(LEDhour,LOW);
+        TimeSetsecond();
+        break;
+        case 4://设置时间——年
+        Serial.println("OK!");
+        digitalWrite(LEDsecond,LOW);
+        digitalWrite(LEDminute,LOW);
+        digitalWrite(LEDhour,HIGH);
+        Timesetyear();
+        break;
+        case 5://设置时间——月
+        Serial.println("OK!");
+        digitalWrite(LEDsecond,LOW);
+        digitalWrite(LEDminute,HIGH);
+        digitalWrite(LEDhour,LOW);
+        Timesetmonth();
+        break;
+        case 6://设置时间——日
+        Serial.println("OK!");
+        digitalWrite(LEDsecond,HIGH);
+        digitalWrite(LEDminute,LOW);
+        digitalWrite(LEDhour,LOW);
+        Timesetday();
+        break;
+      }
+      
+  FLAG:
+  if(setcondition==0)//正常显示时间
+  {
+  displayhourminutesecond();
+  second++;
+  }
+  if(setcondition==8)//计时模式显示
+  {
+     if(begincondition==-1)
+     {
+       clocksecondlow+=debouncetime/10;
+       timecount0();
+     }
+     displayclock();
+  }
+  if(setcondition ==0)
+  {//相关延时的控制
+    if(delaycondition == 1)
+    delay(1000-debouncetime);
+    if(delaycondition == -1)
+    {
+      delay(1000-timecount);  
+      delaycondition = -delaycondition;
+      timecount = 0;
+    }
+  }
+  if(setcondition == 9)//显示日期
+    displayyearmonthday();
+  if(setcondition > 0 && setcondition <8)
+  delay(debouncetime);//非显示时间其他模式的按键读入延时
+}
